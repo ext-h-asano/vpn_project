@@ -1,4 +1,7 @@
 const WebSocket = require('ws');
+const wrtc = require('@roamhq/wrtc')
+const { RTCPeerConnection, RTCSessionDescription } = wrtc;
+const { MediaDevices } = wrtc.nonstandard;
 const {exec, spawn} = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
@@ -13,8 +16,6 @@ let peer_connection = null;
 
 let moveCoordX = [];
 let moveCoordY = [];
-
-
 
 
 async function startServerConnection(){
@@ -200,41 +201,112 @@ async function isScrcpyRunning() {
 
 // WebRTC関連の処理
 async function receiveOfferAndSendAnswer(data) {
-    // WebRTC関連のコードはここに実装
-    // Node.jsでWebRTCを使用するには、wrtc、simple-peerなどのライブラリが必要です
-    console.log("WebRTC offer received, implementation needed");
-    
-    // 以下はデータチャネルでのタッチイベント処理の例
-    // 実際の実装ではWebRTCライブラリに応じて調整が必要です
-    /*
-    peerConnection.on('datachannel', channel => {
-        console.log("Data channel was opened.");
-        channel.on('message', async (message) => {
-            const coords = JSON.parse(message);
+    try {
+        // シグナリングサーバーからOfferを受けて、SDPの形式に直す
+        const offerSdp = new RTCSessionDescription({
+            sdp: data.sdp.sdp,
+            type: "offer"
+        });
+
+        // PeerConnectionを作成する
+        peer_connection = new RTCPeerConnection();
+
+        // Videoトラックを作成して、PeerConnectionに追加する
+        const videoTrack = await createLocalVideoTrack();
+        if (videoTrack) {
+            peer_connection.addTrack(videoTrack);
+        }
+
+        // データチャンネルの開設を確認する
+        peer_connection.ondatachannel = (event) => {
+            const channel = event.channel;
+            console.log("Data channel was opened.");
             
-            if (coords.type === "swipe_start") {
-                await execPromise(`adb shell input motionevent DOWN ${coords.startX} ${coords.startY}`);
-                console.log("swipe_start");
-            } else if (coords.type === "move_to") {
-                console.log("move");
-                moveCoordX.push(coords.endX);
-                moveCoordY.push(coords.endY);
-                if (moveCoordX.length === 4) {
-                    const lastX = moveCoordX[moveCoordX.length - 1];
-                    const lastY = moveCoordY[moveCoordY.length - 1];
-                    await execPromise(`adb shell input motionevent MOVE ${lastX} ${lastY}`);
-                    moveCoordX = [];
-                    moveCoordY = [];
+            channel.onmessage = async (event) => {
+                try {
+                    const coords = JSON.parse(event.data);
+                    
+                    if (coords.type === "swipe_start") {
+                        await execPromise(`adb shell input motionevent DOWN ${coords.startX} ${coords.startY}`);
+                        console.log("swipe_start");
+                    } else if (coords.type === "move_to") {
+                        console.log("move");
+                        moveCoordX.push(coords.endX);
+                        moveCoordY.push(coords.endY);
+                        if (moveCoordX.length === 4) {
+                            const lastX = moveCoordX[moveCoordX.length - 1];
+                            const lastY = moveCoordY[moveCoordY.length - 1];
+                            await execPromise(`adb shell input motionevent MOVE ${lastX} ${lastY}`);
+                            moveCoordX = [];
+                            moveCoordY = [];
+                        }
+                    } else if (coords.type === "swipe_end") {
+                        await execPromise(`adb shell input motionevent UP ${coords.endX} ${coords.endY}`);
+                    } else if (coords.type === "touch") {
+                        await execPromise(`adb shell input tap ${coords.x} ${coords.y}`);
+                    }
+                } catch (error) {
+                    console.error("データチャネルメッセージ処理エラー:", error);
                 }
-            } else if (coords.type === "swipe_end") {
-                await execPromise(`adb shell input motionevent UP ${coords.endX} ${coords.endY}`);
-            } else if (coords.type === "touch") {
-                await execPromise(`adb shell input tap ${coords.x} ${coords.y}`);
+            };
+            
+            channel.onclose = () => {
+                console.log("Data channel closed");
+            };
+            
+            channel.onerror = (error) => {
+                console.error("Data channel error:", error);
+            };
+        };
+
+        // 受け取ったOfferをリモートSDPとしてRTCPeerConnectionに追加
+        await peer_connection.setRemoteDescription(offerSdp);
+
+        // Answerを作成してローカルSDPとしてRTCPeerConnectionに追加
+        const answerSdp = await peer_connection.createAnswer();
+        await peer_connection.setLocalDescription(answerSdp);
+
+        // 作成したAnswerをアプリに返す
+        sc.send(JSON.stringify({
+            "sdp": {
+                "sdp": peer_connection.localDescription.sdp,
+                "type": peer_connection.localDescription.type
+            },
+            "remote": remote_id
+        }));
+        
+        console.log("WebRTC answer sent successfully");
+    } catch (error) {
+        console.error("WebRTC処理エラー:", error);
+    }
+}
+
+async function createLocalVideoTrack() {
+    try {
+        // v4l2デバイスからメディアストリームを取得
+        const mediaDevices = new MediaDevices();
+        const stream = await mediaDevices.getUserMedia({
+            video: {
+                deviceId: '/dev/video0',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
             }
         });
-    });
-    */
+        
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length > 0) {
+            console.log("ビデオトラックを取得しました");
+            return videoTracks[0];
+        } else {
+            console.error("ビデオトラックが見つかりませんでした");
+            return null;
+        }
+    } catch (error) {
+        console.error("ビデオトラック作成エラー:", error);
+        return null;
+    }
 }
+
 
 async function main() {
     console.log('Node.jsアプリケーションの開始');
