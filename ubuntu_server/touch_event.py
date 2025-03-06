@@ -92,9 +92,10 @@ def swipe(sock, start_x, start_y, end_x, end_y, duration=0.5, steps=10):
     send_touch_event(sock, ACTION_UP, end_x, end_y)
 
 def main():
+    sock = None
     try:
         # ソケット接続
-        sock = socket.socket(socket.AF_INET, SOCK_STREAM)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(('127.0.0.1', LOCAL_PORT))
         
         print(f"接続成功: 127.0.0.1:{LOCAL_PORT}")
@@ -113,7 +114,7 @@ def main():
         
         print("タップ完了")
         
-        # スワイプ操作の例（コメントアウトされています）
+        # スワイプ操作の例（必要に応じてコメントを外してください）
         # print("スワイプ実行: 下から上へ")
         # swipe(sock, 500, 1000, 500, 200, duration=0.3)
         # print("スワイプ完了")
@@ -121,7 +122,8 @@ def main():
     except Exception as e:
         print(f"エラー: {e}")
     finally:
-        sock.close()
+        if sock:
+            sock.close()
         print("接続終了")
 
 if __name__ == "__main__":
