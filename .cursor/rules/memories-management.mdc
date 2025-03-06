@@ -1,0 +1,73 @@
+---
+description: メモリー管理ルール
+globs: 
+alwaysApply: false
+---
+ # メモリー管理ルール
+
+メモリーファイルの管理と更新に関するルール。
+
+<rule>
+name: memories_management
+description: メモリーファイルの管理と更新に関する標準規則
+filters:
+  # メモリーファイルに関連するファイルをマッチ
+  - type: file_pattern
+    pattern: "^.cursor/memories.*\\.md$"
+  # メモリー更新イベントをマッチ
+  - type: event
+    pattern: "file_update"
+
+actions:
+  - type: enforce
+    conditions:
+      - pattern: "^.cursor/memories.*\\.md$"
+        message: "メモリーファイルは .cursor ディレクトリに配置する必要があります"
+
+  - type: suggest
+    message: |
+      メモリーファイルの管理ルール：
+
+      1. ファイル構成：
+         ```
+         .cursor/
+         ├── memories.md      # メインのメモリーファイル
+         ├── memories2.md     # オーバーフロー用（1000行超過時）
+         └── ...
+         ```
+
+      2. エントリーフォーマット：
+         - 開発関連活動：
+           `[バージョン] Development: 実装の詳細な説明、技術的決定、実装の詳細、最終結果`
+         
+         - ユーザー主導のドキュメント：
+           `[バージョン] Manual Update: 議論、決定事項、要件、戦略的計画の結果の詳細`
+
+      3. 更新タイミング：
+         - ユーザーとの各インタラクション後
+         - 各会話の終了時
+
+      4. エントリー要件：
+         - 厳密な時系列順
+         - 過去のエントリーは削除しない
+         - 1行の長いプレーンテキスト
+         - 適切なタグ付け（#feature, #bug, #improvement）
+         - タイムスタンプとエントリータイプの含有
+
+      5. オーバーフロー管理：
+         - 1000行を超えた場合、新しいファイルを作成
+         - ファイル間の相互参照を維持
+         - 連続性とコンテキストの保持
+
+examples:
+  - input: |
+      # 正しいエントリー例
+      [v1.0.2] Development: TypeScriptインターフェースを使用したレスポンシブCardコンポーネントの実装、ARIAアクセシビリティラベル、キーボードナビゲーションサポート、useMemoフックによる描画パフォーマンスの最適化。モバイルUXの改善とWCAG 2.1標準への準拠。 #feature #accessibility
+
+      [v1.1.0] Manual Update: チーム計画セッションで新しいアクセシビリティ要件を確立 - すべてのインタラクティブ要素はキーボードナビゲーション、ARIAラベル、可視フォーカス状態をサポートする必要がある。この決定はコンポーネントライブラリの開発ロードマップに影響を与える。 #planning #accessibility
+    output: "正しく形式化されたメモリーエントリー"
+
+metadata:
+  priority: high
+  version: 1.0
+</rule>
