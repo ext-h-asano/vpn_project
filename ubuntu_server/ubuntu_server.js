@@ -132,6 +132,8 @@ async function gotMessageFromServer(message){
         sc.send(JSON.stringify({"status": "success", "remote": remote_id}));
     } else if (signal.sdp) {
         await receiveOfferAndSendAnswer(signal);
+    } else if (signal.ice) {
+        await receiveIceCandidate(signal.ice);
     } else {
         console.log("Key 'type' not found in signal");
     }
@@ -210,17 +212,18 @@ async function receiveOfferAndSendAnswer(data) {
 
         // PeerConnectionを作成する
         peer_connection = new RTCPeerConnection();
+        console.log("PeerConnectionを作成した。");
 
         // Videoトラックを作成して、PeerConnectionに追加する
-        const videoTrack = await createLocalVideoTrack();
-        if (videoTrack) {
-            peer_connection.addTrack(videoTrack);
-        }
+        // const videoTrack = await createLocalVideoTrack();
+        // if (videoTrack) {
+        //     peer_connection.addTrack(videoTrack);
+        // }
 
         // データチャンネルの開設を確認する
         peer_connection.ondatachannel = (event) => {
             const channel = event.channel;
-            console.log("Data channel was opened.");
+            console.log("データチャンネルを開設した。");
             
             channel.onmessage = async (event) => {
                 try {
@@ -261,10 +264,13 @@ async function receiveOfferAndSendAnswer(data) {
 
         // 受け取ったOfferをリモートSDPとしてRTCPeerConnectionに追加
         await peer_connection.setRemoteDescription(offerSdp);
+        console.log("リモートSDPを設定した。");
 
         // Answerを作成してローカルSDPとしてRTCPeerConnectionに追加
         const answerSdp = await peer_connection.createAnswer();
+        console.log("Answerを作成した。");
         await peer_connection.setLocalDescription(answerSdp);
+        console.log("Answerを設定した。");
 
         // 作成したAnswerをアプリに返す
         sc.send(JSON.stringify({
@@ -274,10 +280,44 @@ async function receiveOfferAndSendAnswer(data) {
             },
             "remote": remote_id
         }));
-        
-        console.log("WebRTC answer sent successfully");
+        console.log("作成したAnswerを送り返した。");
+
+        peer_connection.onicecandidate = (event) => {
+            if (event.candidate) {
+                sc.send(JSON.stringify({
+                    "ice": {
+                        "candidate": event.candidate.candidate,
+                        "sdpMid": event.candidate.sdpMid,
+                        "sdpMLineIndex": event.candidate.sdpMLineIndex
+                    },
+                    "remote": remote_id
+                }));
+                console.log("ICE候補を送る。");
+            }
+        }
+
+
     } catch (error) {
         console.error("WebRTC処理エラー:", error);
+    }
+}
+
+//ICE候補を受け取った時の処理
+async function receiveIceCandidate(iceData) {
+    try {
+        if (peer_connection) {
+            const iceCandidate = new RTCIceCandidate({
+                candidate: iceData.candidate,
+                sdpMid: iceData.sdpMid,
+                sdpMLineIndex: iceData.sdpMLineIndex
+            });
+            await peer_connection.addIceCandidate(iceCandidate);
+            console.log("ICE候補を追加した。");
+        } else {
+            console.log("PeerConnectionが存在しません。");
+        }
+    } catch (error) {
+        console.error("ICE候補追加エラー:", error);
     }
 }
 
