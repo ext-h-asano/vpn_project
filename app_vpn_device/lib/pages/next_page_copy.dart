@@ -201,41 +201,41 @@ class _NextPageState extends State<NextPage> {
     _dataChannel = await _peerConnection?.createDataChannel('signalig_data_channel', dataChannelConfig);
 
 
+    _peerConnection?.onIceGatheringState = (RTCIceGatheringState state) async {
 
-    //ICEトリくる用にここ一から下はコメントアウトしてもいいかも
-    // _peerConnection?.onIceGatheringState = (RTCIceGatheringState state) async {
-
-    //   //ICEの収集が終わるまで、早期returnをする
-    //   if (state != RTCIceGatheringState.RTCIceGatheringStateComplete) {
-    //     return;
-    //   }
+      //ICEの収集が終わるまで、早期returnをする
+      if (state != RTCIceGatheringState.RTCIceGatheringStateComplete) {
+        return;
+      }
       
-    //   //収集が終わったら、Offerを送信する。
-    //   var localDescription = await _peerConnection?.getLocalDescription();
-    //   print("Local SDP: ${localDescription?.sdp}");
+      //収集が終わったら、Offerを送信する。
+      var localDescription = await _peerConnection?.getLocalDescription();
+      print("Local SDP: ${localDescription?.sdp}");
       
-    //   _sendSignalingMessage({
-    //     "sdp": {"type": "offer", "sdp": localDescription!.sdp},
-    //     "remote": _deviceId
-    //   });
-    //   print("ICEを収集して、それを、送信した。");
-    // };
-
-
-
-    _peerConnection?.onIceCandidate = (RTCIceCandidate candidate) {
-      print('ICE候補を作成しました');
-      _iceCandidates.add(candidate);
-      print('あいしーいー: ${candidate.candidate}');
       _sendSignalingMessage({
-        'ice': {
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex
-        },
-        'remote': _deviceId
+        "sdp": {"type": "offer", "sdp": localDescription!.sdp},
+        "remote": _deviceId
       });
+      print("ICEを収集して、それを、送信した。");
     };
+
+
+//Iceの交換も一旦offerに含めるからコメントアウト
+    // _peerConnection?.onIceCandidate = (RTCIceCandidate candidate) {
+    //   if (candidate != null) {
+    //     print('ICE候補を作成しました');
+    //     _iceCandidates.add(candidate);
+    //     print('あいしーいー: ${candidate.candidate}');
+    //     _sendSignalingMessage({
+    //       'ice': {
+    //         'candidate': candidate.candidate,
+    //         'sdpMid': candidate.sdpMid,
+    //         'sdpMLineIndex': candidate.sdpMLineIndex
+    //       },
+    //       'remote': widget.remoteId
+    //     });
+    //   }
+    // };
 
     // _peerConnection?.onConnectionState = (RTCPeerConnectionState state) {
     //   print('Connection state change: $state');
@@ -309,13 +309,15 @@ class _NextPageState extends State<NextPage> {
         RTCSessionDescription? offer = await _peerConnection?.createOffer();
         if (offer != null) {
           await _peerConnection?.setLocalDescription(offer);
-          var localDescription = await _peerConnection?.getLocalDescription();
-          print('このオファーが設定されています:');
+          // var localDescription = await _peerConnection?.getLocalDescription();
+          // print('このオファーが設定されています:');
           // print(localDescription?.toMap());
-          _sendSignalingMessage({
-            'sdp': {"type": "offer", "sdp": offer.sdp},
-            'remote': _deviceId
-          });
+
+//まだここではOfferを送らない！
+          // _sendSignalingMessage({
+          //   'sdp': {"type": "offer", "sdp": offer.sdp},
+          //   'remote': widget.remoteId
+          // });
 
           setState(() {
             _isConnecting = true;
