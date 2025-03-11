@@ -215,21 +215,52 @@ async function receiveOfferAndSendAnswer(data) {
         peer_connection = new RTCPeerConnection();
         console.log("PeerConnectionを作成した。");
 
-        // getUserMediaを使用してカメラ映像を取得
+        // RTCVideoSourceを使用して映像トラックを作成
         try {
-            const stream = await wrtc.getUserMedia({
-                audio: false,
-                video: true
-            });
-            console.log("カメラ映像の取得に成功しました。");
-
-            // 取得したストリームのトラックをPeerConnectionに追加
-            stream.getTracks().forEach(track => {
-                peer_connection.addTrack(track, stream);
-                console.log(`トラック(${track.kind})をPeerConnectionに追加しました。`);
-            });
+            // 動画のソースを作成する
+            const videoSource = new RTCVideoSource();
+            console.log("動画のソースを作成した。");
+            
+            // createTrack()でトラックを作成
+            const videoTrack = videoSource.createTrack();
+            console.log("動画のトラックを作成した。");
+            
+            // トラックをPeerConnectionに追加
+            const stream = new wrtc.MediaStream();
+            stream.addTrack(videoTrack);
+            peer_connection.addTrack(videoTrack, stream);
+            console.log("動画のトラックをPeerConnectionに追加した。");
+            
+            // v4l2loopbackデバイスからフレームを取得して送信する処理
+            // ダミーフレームを送信（テスト用）
+            const sendDummyFrame = () => {
+                try {
+                    // 640x480の黒いフレームを作成
+                    const width = 640;
+                    const height = 480;
+                    const data = new Uint8Array(width * height * 1.5); // YUV420形式
+                    
+                    // フレームをビデオソースに送信
+                    videoSource.onFrame({
+                        width: width,
+                        height: height,
+                        data: data
+                    });
+                    console.log("ダミーフレームを送信しました。");
+                    
+                    // 定期的にフレームを送信
+                    setTimeout(sendDummyFrame, 33); // 約30fps
+                } catch (err) {
+                    console.error("フレーム処理エラー:", err);
+                    setTimeout(sendDummyFrame, 100); // エラー時は少し待機
+                }
+            };
+            
+            // フレーム送信開始
+            sendDummyFrame();
+            
         } catch (mediaError) {
-            console.error("カメラ映像の取得に失敗しました:", mediaError);
+            console.error("映像トラック作成に失敗しました:", mediaError);
         }
 
         // データチャンネルの開設を確認する
