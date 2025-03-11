@@ -9,6 +9,9 @@ const execPromise = util.promisify(exec);
 const LAUNCH_SSL_PORT = 3001;
 const LAUNCH_SERVER_ADDRESS = `wss://signaling.android-vpn.com:${LAUNCH_SSL_PORT}`;
 
+// フレーム送信停止フラグをグローバル変数として初期化
+global.shouldStopFrameSending = false;
+
 const local_id = 'test_device_id';
 const remote_id = 'f7a46a28-e091-7031-dcd8-f3a301923e0c';
 
@@ -205,6 +208,9 @@ async function isScrcpyRunning() {
 // WebRTC関連の処理
 async function receiveOfferAndSendAnswer(data) {
     try {
+        // 新しい接続を開始するので、フレーム送信停止フラグをリセット
+        global.shouldStopFrameSending = false;
+        
         // シグナリングサーバーからOfferを受けて、SDPの形式に直す
         const offerSdp = new RTCSessionDescription({
             sdp: data.sdp.sdp,
@@ -239,6 +245,12 @@ async function receiveOfferAndSendAnswer(data) {
             // v4l2loopbackデバイスからフレームを取得して送信する処理
             // ダミーフレームを送信（テスト用）
             const sendDummyFrame = () => {
+                // 接続が失敗または終了している場合は処理を中止
+                if (global.shouldStopFrameSending) {
+                    console.log("接続状態により、フレーム送信を中止します。");
+                    return;
+                }
+                
                 cam.capture((success) => {
                     if (success) {
                         try {
@@ -251,36 +263,23 @@ async function receiveOfferAndSendAnswer(data) {
                             });
 
                             console.log("フレームを送信しました。");
-                            setTimeout(sendDummyFrame, 33); // 約30fps
+                            // 接続状態を再確認してから次のフレーム送信をスケジュール
+                            if (!global.shouldStopFrameSending) {
+                                setTimeout(sendDummyFrame, 33); // 約30fps
+                            }
                         } catch (err) {
                             console.error("フレーム処理エラー:", err);
-                            setTimeout(sendDummyFrame, 100);
+                            if (!global.shouldStopFrameSending) {
+                                setTimeout(sendDummyFrame, 100);
+                            }
                         }
                     } else {
                         console.error("フレームキャプチャに失敗しました。");
-                        setTimeout(sendDummyFrame, 100);
+                        if (!global.shouldStopFrameSending) {
+                            setTimeout(sendDummyFrame, 100);
+                        }
                     }
                 });
-                // try {
-                //     // 640x480の黒いフレームを作成
-                //     const width = 640;
-                //     const height = 480;
-                //     const data = new Uint8Array(width * height * 1.5); // YUV420形式
-                    
-                //     // フレームをビデオソースに送信
-                //     videoSource.onFrame({
-                //         width: width,
-                //         height: height,
-                //         data: data
-                //     });
-                //     console.log("ダミーフレームを送信しました。");
-                    
-                //     // 定期的にフレームを送信
-                //     setTimeout(sendDummyFrame, 33); // 約30fps
-                // } catch (err) {
-                //     console.error("フレーム処理エラー:", err);
-                //     setTimeout(sendDummyFrame, 100); // エラー時は少し待機
-                // }
             };
             
             // フレーム送信開始
@@ -339,10 +338,24 @@ async function receiveOfferAndSendAnswer(data) {
         // ピア接続の状態変化を監視するイベントリスナーを追加
         peer_connection.onconnectionstatechange = (event) => {
             console.log(`接続状態が変化しました: ${peer_connection.connectionState}`);
+            // 接続が失敗または切断された場合、フレーム送信を停止するフラグを設定
+            if (peer_connection.connectionState === 'failed' || 
+                peer_connection.connectionState === 'disconnected' || 
+                peer_connection.connectionState === 'closed') {
+                global.shouldStopFrameSending = true;
+                console.log("接続が失敗または終了したため、フレーム送信を停止します。");
+            }
         };
         
         peer_connection.oniceconnectionstatechange = (event) => {
             console.log(`ICE接続状態が変化しました: ${peer_connection.iceConnectionState}`);
+            // ICE接続が失敗または切断された場合、フレーム送信を停止
+            if (peer_connection.iceConnectionState === 'failed' || 
+                peer_connection.iceConnectionState === 'disconnected' || 
+                peer_connection.iceConnectionState === 'closed') {
+                global.shouldStopFrameSending = true;
+                console.log("ICE接続が失敗または終了したため、フレーム送信を停止します。");
+            }
         };
         
         peer_connection.onsignalingstatechange = (event) => {
