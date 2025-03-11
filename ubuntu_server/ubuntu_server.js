@@ -347,8 +347,17 @@ async function createLocalVideoTrack() {
                 if (success) {
                     try {
                         const rawFrame = cam.frameRaw();
+                        
+                        // フレームをRTCVideoSourceが期待する形式に変換
+                        const videoFrame = {
+                            width: config.width,
+                            height: config.height,
+                            data: new Uint8ClampedArray(rawFrame)
+                        };
+                        
                         // フレームをビデオソースに送信
-                        videoSource.onFrame(rawFrame);
+                        videoSource.onFrame(videoFrame);
+                        
                         // 次のフレームをキャプチャ
                         setTimeout(captureFrame, 33); // 約30fps
                     } catch (err) {
