@@ -267,6 +267,23 @@ async function receiveOfferAndSendAnswer(data) {
         await peer_connection.setRemoteDescription(offerSdp);
         console.log("リモートSDPを設定した。");
 
+        // ピア接続の状態変化を監視するイベントリスナーを追加
+        peer_connection.onconnectionstatechange = (event) => {
+            console.log(`接続状態が変化しました: ${peer_connection.connectionState}`);
+        };
+        
+        peer_connection.oniceconnectionstatechange = (event) => {
+            console.log(`ICE接続状態が変化しました: ${peer_connection.iceConnectionState}`);
+        };
+        
+        peer_connection.onsignalingstatechange = (event) => {
+            console.log(`シグナリング状態が変化しました: ${peer_connection.signalingState}`);
+        };
+        
+        peer_connection.onicegatheringstatechange = (event) => {
+            console.log(`ICE収集状態が変化しました: ${peer_connection.iceGatheringState}`);
+        };
+
         // Answerを作成してローカルSDPとしてRTCPeerConnectionに追加
         const answerSdp = await peer_connection.createAnswer();
         console.log("Answerを作成した。");
@@ -294,6 +311,13 @@ async function receiveOfferAndSendAnswer(data) {
                     "remote": remote_id
                 }));
                 console.log("ICE候補を送る。");
+                console.log(`ICE候補の詳細: ${JSON.stringify({
+                    candidate: event.candidate.candidate,
+                    sdpMid: event.candidate.sdpMid,
+                    sdpMLineIndex: event.candidate.sdpMLineIndex
+                })}`);
+            } else {
+                console.log("ICE候補の収集が完了しました。");
             }
         }
 
@@ -347,17 +371,8 @@ async function createLocalVideoTrack() {
                 if (success) {
                     try {
                         const rawFrame = cam.frameRaw();
-                        
-                        // フレームをRTCVideoSourceが期待する形式に変換
-                        const videoFrame = {
-                            width: config.width,
-                            height: config.height,
-                            data: new Uint8ClampedArray(rawFrame)
-                        };
-                        
                         // フレームをビデオソースに送信
-                        videoSource.onFrame(videoFrame);
-                        
+                        videoSource.onFrame(rawFrame);
                         // 次のフレームをキャプチャ
                         setTimeout(captureFrame, 33); // 約30fps
                     } catch (err) {
