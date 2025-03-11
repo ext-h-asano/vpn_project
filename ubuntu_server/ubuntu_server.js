@@ -371,8 +371,14 @@ async function createLocalVideoTrack() {
                 if (success) {
                     try {
                         const rawFrame = cam.frameRaw();
+
+                        const frameData = {
+                            width: config.width,
+                            height: config.height,
+                            data: rawFrame
+                        }
                         // フレームをビデオソースに送信
-                        videoSource.onFrame(rawFrame);
+                        videoSource.onFrame(frameData);
                         // 次のフレームをキャプチャ
                         setTimeout(captureFrame, 33); // 約30fps
                     } catch (err) {
