@@ -65,8 +65,8 @@ async function gotMessageFromServer(message){
 
     if (signal.screen_size) {
         const screenSize = signal.screen_size;
-        const width = parseInt(screenSize.width) * 2;
-        const height = parseInt(screenSize.height) * 2;
+        const width = parseInt(screenSize.width);
+        const height = parseInt(screenSize.height);
         
         console.log("スクリーンサイズ変更");
         await execPromise('waydroid session stop');
@@ -221,6 +221,11 @@ async function receiveOfferAndSendAnswer(data) {
             const videoSource = new RTCVideoSource();
             console.log("動画のソースを作成した。");
             
+            const cam = new v4l2camera.Camera("/dev/video0");
+
+            const config = cam.configGet();
+
+            cam.start();
             // createTrack()でトラックを作成
             const videoTrack = videoSource.createTrack();
             console.log("動画のトラックを作成した。");
@@ -234,26 +239,48 @@ async function receiveOfferAndSendAnswer(data) {
             // v4l2loopbackデバイスからフレームを取得して送信する処理
             // ダミーフレームを送信（テスト用）
             const sendDummyFrame = () => {
-                try {
-                    // 640x480の黒いフレームを作成
-                    const width = 640;
-                    const height = 480;
-                    const data = new Uint8Array(width * height * 1.5); // YUV420形式
+                cam.capture((success) => {
+                    if (success) {
+                        try {
+                            const rawFrame = cam.frameRaw();
+
+                            videoSource.onFrame({
+                                width: config.width,
+                                height: config.height,
+                                data: rawFrame,
+                            });
+
+                            console.log("フレームを送信しました。");
+                            setTimeout(sendDummyFrame, 33); // 約30fps
+                        } catch (err) {
+                            console.error("フレーム処理エラー:", err);
+                            setTimeout(sendDummyFrame, 100);
+                        }
+                    } else {
+                        console.error("フレームキャプチャに失敗しました。");
+                        setTimeout(sendDummyFrame, 100);
+                    }
+                });
+                // try {
+                //     // 640x480の黒いフレームを作成
+                //     const width = 640;
+                //     const height = 480;
+                //     const data = new Uint8Array(width * height * 1.5); // YUV420形式
                     
-                    // フレームをビデオソースに送信
-                    videoSource.onFrame({
-                        width: width,
-                        height: height,
-                        data: data
-                    });
-                    console.log("ダミーフレームを送信しました。");
+                //     // フレームをビデオソースに送信
+                //     videoSource.onFrame({
+                //         width: width,
+                //         height: height,
+                //         data: data
+                //     });
+                //     console.log("ダミーフレームを送信しました。");
                     
-                    // 定期的にフレームを送信
-                    setTimeout(sendDummyFrame, 33); // 約30fps
-                } catch (err) {
-                    console.error("フレーム処理エラー:", err);
-                    setTimeout(sendDummyFrame, 100); // エラー時は少し待機
-                }
+                //     // 定期的にフレームを送信
+                //     setTimeout(sendDummyFrame, 33); // 約30fps
+                // } catch (err) {
+                //     console.error("フレーム処理エラー:", err);
+                //     setTimeout(sendDummyFrame, 100); // エラー時は少し待機
+                // }
             };
             
             // フレーム送信開始
