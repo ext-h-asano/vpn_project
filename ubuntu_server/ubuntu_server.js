@@ -221,10 +221,52 @@ async function receiveOfferAndSendAnswer(data) {
         // 2. 次に、createTrack()でトラックを作成します（パイプラインの確立）
         const videoTrack = videoSource.createTrack();
         console.log("動画のトラックを作成した。");
+
+        // カメラデバイスを初期化
+        const cam = new v4l2camera.Camera("/dev/video0");
+        
+        // カメラの設定を確認
+        const config = cam.configGet();
+        console.log("カメラ設定:", config);
+        
+        // カメラをスタート
+        cam.start();
+        console.log("カメラを開始しました");
+        // フレームキャプチャ関数
+        const captureFrame = () => {
+            cam.capture((success) => {
+                if (success) {
+                    try {
+                        const rawFrame = cam.frameRaw();
+
+                        const frameData = {
+                            width: config.width,
+                            height: config.height,
+                            data: rawFrame
+                        }
+                        // フレームをビデオソースに送信
+                        videoSource.onFrame(frameData);
+                        console.log("フレームをビデオソースに送信した。");
+                        // 次のフレームをキャプチャ
+                        setTimeout(captureFrame, 33); // 約30fps
+                    } catch (err) {
+                        console.error("フレーム処理エラー:", err);
+                        setTimeout(captureFrame, 100); // エラー時は少し待機
+                    }
+                } else {
+                    console.error("フレームキャプチャ失敗");
+                    setTimeout(captureFrame, 100); // 失敗時は少し待機
+                }
+            });
+        };
+        
+        // 最初のフレームキャプチャを開始
+        captureFrame();
+
         peer_connection.addTrack(videoTrack);
         console.log("動画のトラックをPeerConnectionに追加した。");
 
-        
+
         // データチャンネルの開設を確認する
         peer_connection.ondatachannel = (event) => {
             const channel = event.channel;
