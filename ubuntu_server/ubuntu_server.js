@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const wrtc = require('@roamhq/wrtc')
 const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = wrtc;
-const { RTCVideoSource, MediaStream } = wrtc.nonstandard;
+const { RTCVideoSource} = wrtc.nonstandard;
 const v4l2camera = require("@dwe.ai/v4l2camera");
 const {exec, spawn} = require('child_process');
 const util = require('util');
@@ -215,12 +215,16 @@ async function receiveOfferAndSendAnswer(data) {
         peer_connection = new RTCPeerConnection();
         console.log("PeerConnectionを作成した。");
 
-        // Videoトラックを作成して、PeerConnectionに追加する
-        const videoTrack = await createLocalVideoTrack();
-        if (videoTrack) {
-            peer_connection.addTrack(videoTrack);
-        }
+        // 動画のソースを作成する
+        const videoSource = new RTCVideoSource();
+        console.log("動画のソースを作成した。");
+        // 2. 次に、createTrack()でトラックを作成します（パイプラインの確立）
+        const videoTrack = videoSource.createTrack();
+        console.log("動画のトラックを作成した。");
+        peer_connection.addTrack(videoTrack);
+        console.log("動画のトラックをPeerConnectionに追加した。");
 
+        
         // データチャンネルの開設を確認する
         peer_connection.ondatachannel = (event) => {
             const channel = event.channel;
