@@ -1,7 +1,8 @@
 const WebSocket = require('ws');
 const wrtc = require('@roamhq/wrtc')
-const { RTCPeerConnection, RTCSessionDescription } = wrtc;
-const { MediaDevices } = wrtc.nonstandard;
+const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = wrtc;
+const { RTCVideoSource, MediaStream } = wrtc.nonstandard;
+const v4l2camera = require("v4l2camera");
 const {exec, spawn} = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
@@ -215,10 +216,10 @@ async function receiveOfferAndSendAnswer(data) {
         console.log("PeerConnectionを作成した。");
 
         // Videoトラックを作成して、PeerConnectionに追加する
-        // const videoTrack = await createLocalVideoTrack();
-        // if (videoTrack) {
-        //     peer_connection.addTrack(videoTrack);
-        // }
+        const videoTrack = await createLocalVideoTrack();
+        if (videoTrack) {
+            peer_connection.addTrack(videoTrack);
+        }
 
         // データチャンネルの開設を確認する
         peer_connection.ondatachannel = (event) => {
@@ -323,24 +324,49 @@ async function receiveIceCandidate(iceData) {
 
 async function createLocalVideoTrack() {
     try {
-        // v4l2デバイスからメディアストリームを取得
-        const mediaDevices = new MediaDevices();
-        const stream = await mediaDevices.getUserMedia({
-            video: {
-                deviceId: '/dev/video0',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        });
+        // 動画のソースを作成する
+        const videoSource = new RTCVideoSource();
+        // 2. 次に、createTrack()でトラックを作成します（パイプラインの確立）
+        const videoTrack = videoSource.createTrack();
         
-        const videoTracks = stream.getVideoTracks();
-        if (videoTracks.length > 0) {
-            console.log("ビデオトラックを取得しました");
-            return videoTracks[0];
-        } else {
-            console.error("ビデオトラックが見つかりませんでした");
-            return null;
-        }
+        // カメラデバイスを初期化
+        const cam = new v4l2camera.Camera("/dev/video0");
+        
+        // カメラの設定を確認
+        const config = cam.configGet();
+        console.log("カメラ設定:", config);
+        
+        // カメラをスタート
+        cam.start();
+        console.log("カメラを開始しました");
+        
+        
+        // フレームキャプチャ関数
+        const captureFrame = () => {
+            cam.capture((success) => {
+                if (success) {
+                    try {
+                        const rawFrame = cam.frameRaw();
+                        // フレームをビデオソースに送信
+                        videoSource.onFrame(rawFrame);
+                        // 次のフレームをキャプチャ
+                        setTimeout(captureFrame, 33); // 約30fps
+                    } catch (err) {
+                        console.error("フレーム処理エラー:", err);
+                        setTimeout(captureFrame, 100); // エラー時は少し待機
+                    }
+                } else {
+                    console.error("フレームキャプチャ失敗");
+                    setTimeout(captureFrame, 100); // 失敗時は少し待機
+                }
+            });
+        };
+        
+        // 最初のフレームキャプチャを開始
+        captureFrame();
+        
+        console.log("ローカルビデオトラックを作成しました");
+        return videoTrack;
     } catch (error) {
         console.error("ビデオトラック作成エラー:", error);
         return null;
