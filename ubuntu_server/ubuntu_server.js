@@ -215,57 +215,22 @@ async function receiveOfferAndSendAnswer(data) {
         peer_connection = new RTCPeerConnection();
         console.log("PeerConnectionを作成した。");
 
-        // 動画のソースを作成する
-        const videoSource = new RTCVideoSource();
-        console.log("動画のソースを作成した。");
-        // 2. 次に、createTrack()でトラックを作成します（パイプラインの確立）
-        const videoTrack = videoSource.createTrack();
-        console.log("動画のトラックを作成した。");
-
-        // カメラデバイスを初期化
-        const cam = new v4l2camera.Camera("/dev/video0");
-        
-        // カメラの設定を確認
-        const config = cam.configGet();
-        console.log("カメラ設定:", config);
-        
-        // カメラをスタート
-        cam.start();
-        console.log("カメラを開始しました");
-        // フレームキャプチャ関数
-        const captureFrame = () => {
-            cam.capture((success) => {
-                if (success) {
-                    try {
-                        const rawFrame = cam.frameRaw();
-
-                        const frameData = {
-                            width: config.width,
-                            height: config.height,
-                            data: rawFrame
-                        }
-                        // フレームをビデオソースに送信
-                        videoSource.onFrame(frameData);
-                        console.log("フレームをビデオソースに送信した。");
-                        // 次のフレームをキャプチャ
-                        setTimeout(captureFrame, 33); // 約30fps
-                    } catch (err) {
-                        console.error("フレーム処理エラー:", err);
-                        setTimeout(captureFrame, 100); // エラー時は少し待機
-                    }
-                } else {
-                    console.error("フレームキャプチャ失敗");
-                    setTimeout(captureFrame, 100); // 失敗時は少し待機
-                }
+        // getUserMediaを使用してカメラ映像を取得
+        try {
+            const stream = await wrtc.getUserMedia({
+                audio: false,
+                video: true
             });
-        };
-        
-        // 最初のフレームキャプチャを開始
-        captureFrame();
+            console.log("カメラ映像の取得に成功しました。");
 
-        peer_connection.addTrack(videoTrack);
-        console.log("動画のトラックをPeerConnectionに追加した。");
-
+            // 取得したストリームのトラックをPeerConnectionに追加
+            stream.getTracks().forEach(track => {
+                peer_connection.addTrack(track, stream);
+                console.log(`トラック(${track.kind})をPeerConnectionに追加しました。`);
+            });
+        } catch (mediaError) {
+            console.error("カメラ映像の取得に失敗しました:", mediaError);
+        }
 
         // データチャンネルの開設を確認する
         peer_connection.ondatachannel = (event) => {
@@ -392,62 +357,6 @@ async function receiveIceCandidate(iceData) {
     }
 }
 
-async function createLocalVideoTrack() {
-    try {
-        // 動画のソースを作成する
-        const videoSource = new RTCVideoSource();
-        // 2. 次に、createTrack()でトラックを作成します（パイプラインの確立）
-        const videoTrack = videoSource.createTrack();
-        
-        // カメラデバイスを初期化
-        const cam = new v4l2camera.Camera("/dev/video0");
-        
-        // カメラの設定を確認
-        const config = cam.configGet();
-        console.log("カメラ設定:", config);
-        
-        // カメラをスタート
-        cam.start();
-        console.log("カメラを開始しました");
-        
-        
-        // フレームキャプチャ関数
-        const captureFrame = () => {
-            cam.capture((success) => {
-                if (success) {
-                    try {
-                        const rawFrame = cam.frameRaw();
-
-                        const frameData = {
-                            width: config.width,
-                            height: config.height,
-                            data: rawFrame
-                        }
-                        // フレームをビデオソースに送信
-                        videoSource.onFrame(frameData);
-                        // 次のフレームをキャプチャ
-                        setTimeout(captureFrame, 33); // 約30fps
-                    } catch (err) {
-                        console.error("フレーム処理エラー:", err);
-                        setTimeout(captureFrame, 100); // エラー時は少し待機
-                    }
-                } else {
-                    console.error("フレームキャプチャ失敗");
-                    setTimeout(captureFrame, 100); // 失敗時は少し待機
-                }
-            });
-        };
-        
-        // 最初のフレームキャプチャを開始
-        captureFrame();
-        
-        console.log("ローカルビデオトラックを作成しました");
-        return videoTrack;
-    } catch (error) {
-        console.error("ビデオトラック作成エラー:", error);
-        return null;
-    }
-}
 
 
 async function main() {
