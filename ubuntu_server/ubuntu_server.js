@@ -17,7 +17,7 @@ const remote_id = 'f7a46a28-e091-7031-dcd8-f3a301923e0c';
 
 let sc = null;
 let peer_connection = null;
-
+let admin_peer_connection = null;
 let moveCoordX = [];
 let moveCoordY = [];
 
@@ -37,6 +37,12 @@ async function startServerConnection(){
             "open": {"local":local_id, "remote":remote_id,}
         }));
         console.log("openのメッセージを送信しました。");
+
+        sc.send(JSON.stringify({
+            "open": {"local":"admin_user_id", "remote":remote_id,}
+        }));
+
+        console.log("adminのopenのメッセージを送信しました。");
     });
 
     //メッセージを受け取った時の処理
@@ -135,9 +141,23 @@ async function gotMessageFromServer(message){
         await new Promise(resolve => setTimeout(resolve, 5000));
         sc.send(JSON.stringify({"status": "success", "remote": remote_id}));
     } else if (signal.sdp) {
-        await receiveOfferAndSendAnswer(signal);
+        // 送信元を確認して適切なピアコネクションに割り当てる
+        if (isAdmin) {
+            console.log("管理者からのSDPを受信しました");
+            await receiveAdminOfferAndSendAnswer(signal);
+        } else {
+            console.log("通常ユーザーからのSDPを受信しました");
+            await receiveOfferAndSendAnswer(signal);
+        }
     } else if (signal.ice) {
-        await receiveIceCandidate(signal.ice);
+        // ICEも送信元に基づいて適切なピアコネクションに割り当てる
+        if (isAdmin) {
+            console.log("管理者からのICE候補を受信しました");
+            await receiveAdminIceCandidate(signal.ice);
+        } else {
+            console.log("通常ユーザーからのICE候補を受信しました");
+            await receiveIceCandidate(signal.ice);
+        }
     } else {
         console.log("Key 'type' not found in signal");
     }
@@ -401,11 +421,211 @@ async function receiveOfferAndSendAnswer(data) {
             } else {
                 console.log("ICE候補の収集が完了しました。");
             }
+
         }
 
 
     } catch (error) {
         console.error("WebRTC処理エラー:", error);
+    }
+}
+
+// 管理者用のWebRTC処理
+async function receiveAdminOfferAndSendAnswer(data) {
+    try {
+        // シグナリングサーバーからOfferを受けて、SDPの形式に直す
+        const offerSdp = new RTCSessionDescription({
+            sdp: data.sdp.sdp,
+            type: "offer"
+        });
+
+        // 管理者用PeerConnectionを作成する
+        admin_peer_connection = new RTCPeerConnection();
+        console.log("管理者用PeerConnectionを作成した。");
+
+        // RTCVideoSourceを使用して映像トラックを作成
+        try {
+            // 通常のピアコネクションと同じビデオソースを共有する
+            const videoSource = new RTCVideoSource();
+            console.log("管理者用動画ソースを作成した。");
+            
+            const cam = new v4l2camera.Camera("/dev/video0");
+            const config = cam.configGet();
+            cam.start();
+            
+            const videoTrack = videoSource.createTrack();
+            console.log("管理者用動画トラックを作成した。");
+            
+            // トラックをPeerConnectionに追加
+            const stream = new wrtc.MediaStream();
+            stream.addTrack(videoTrack);
+            admin_peer_connection.addTrack(videoTrack, stream);
+            console.log("管理者用動画トラックをPeerConnectionに追加した。");
+            
+            // フレーム送信処理（通常のピアコネクションと同様）
+            const sendAdminDummyFrame = () => {
+                // 管理者用の接続が終了している場合は処理を中止
+                if (admin_peer_connection.connectionState === 'failed' || 
+                    admin_peer_connection.connectionState === 'disconnected' || 
+                    admin_peer_connection.connectionState === 'closed') {
+                    console.log("管理者接続状態により、フレーム送信を中止します。");
+                    return;
+                }
+                
+                cam.capture((success) => {
+                    if (success) {
+                        try {
+                            const rawFrame = cam.frameRaw();
+
+                            videoSource.onFrame({
+                                width: config.width,
+                                height: config.height,
+                                data: rawFrame,
+                            });
+
+                            console.log("管理者用フレームを送信しました。");
+                            // 接続状態を再確認してから次のフレーム送信をスケジュール
+                            if (!(admin_peer_connection.connectionState === 'failed' || 
+                                admin_peer_connection.connectionState === 'disconnected' || 
+                                admin_peer_connection.connectionState === 'closed')) {
+                                setTimeout(sendAdminDummyFrame, 33); // 約30fps
+                            }
+                        } catch (err) {
+                            console.error("管理者フレーム処理エラー:", err);
+                            if (!(admin_peer_connection.connectionState === 'failed' || 
+                                admin_peer_connection.connectionState === 'disconnected' || 
+                                admin_peer_connection.connectionState === 'closed')) {
+                                setTimeout(sendAdminDummyFrame, 100);
+                            }
+                        }
+                    } else {
+                        console.error("管理者フレームキャプチャに失敗しました。");
+                        if (!(admin_peer_connection.connectionState === 'failed' || 
+                            admin_peer_connection.connectionState === 'disconnected' || 
+                            admin_peer_connection.connectionState === 'closed')) {
+                            setTimeout(sendAdminDummyFrame, 100);
+                        }
+                    }
+                });
+            };
+            
+            // 管理者用フレーム送信開始
+            sendAdminDummyFrame();
+            
+        } catch (mediaError) {
+            console.error("管理者用映像トラック作成に失敗しました:", mediaError);
+        }
+
+        // 管理者用データチャンネルの開設
+        admin_peer_connection.ondatachannel = (event) => {
+            const channel = event.channel;
+            console.log("管理者用データチャンネルを開設した。");
+            
+            channel.onmessage = async (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log("管理者からのメッセージを受信:", data);
+                    
+                    // 管理者専用のコマンド処理を追加
+                    if (data.type === "admin_command") {
+                        console.log("管理者コマンドを実行:", data.command);
+                        // 管理者専用コマンドの処理をここに追加
+                        // 例: 設定変更、システム制御など
+                    }
+                    
+                    // 必要に応じて他の管理者専用処理を追加
+                    
+                } catch (error) {
+                    console.error("管理者データチャネルメッセージ処理エラー:", error);
+                }
+            };
+            
+            channel.onclose = () => {
+                console.log("管理者データチャンネルが閉じられました");
+            };
+            
+            channel.onerror = (error) => {
+                console.error("管理者データチャンネルエラー:", error);
+            };
+        };
+
+        // 受け取ったOfferをリモートSDPとしてRTCPeerConnectionに追加
+        await admin_peer_connection.setRemoteDescription(offerSdp);
+        console.log("管理者用リモートSDPを設定した。");
+
+        // 接続状態監視
+        admin_peer_connection.onconnectionstatechange = (event) => {
+            console.log(`管理者接続状態が変化しました: ${admin_peer_connection.connectionState}`);
+        };
+        
+        admin_peer_connection.oniceconnectionstatechange = (event) => {
+            console.log(`管理者ICE接続状態が変化しました: ${admin_peer_connection.iceConnectionState}`);
+        };
+        
+        admin_peer_connection.onsignalingstatechange = (event) => {
+            console.log(`管理者シグナリング状態が変化しました: ${admin_peer_connection.signalingState}`);
+        };
+        
+        admin_peer_connection.onicegatheringstatechange = (event) => {
+            console.log(`管理者ICE収集状態が変化しました: ${admin_peer_connection.iceGatheringState}`);
+        };
+
+        // 管理者用Answerを作成してローカルSDPとして設定
+        const answerSdp = await admin_peer_connection.createAnswer();
+        console.log("管理者用Answerを作成した。");
+        await admin_peer_connection.setLocalDescription(answerSdp);
+        console.log("管理者用Answerを設定した。");
+
+        // 管理者用Answerを送信
+        sc.send(JSON.stringify({
+            "sdp": {
+                "sdp": admin_peer_connection.localDescription.sdp,
+                "type": admin_peer_connection.localDescription.type
+            },
+            "remote": "admin_user_id",
+            "sender": local_id
+        }));
+        console.log("管理者用Answerを送り返した。");
+
+        // 管理者用ICE候補の処理
+        admin_peer_connection.onicecandidate = (event) => {
+            if (event.candidate) {
+                sc.send(JSON.stringify({
+                    "ice": {
+                        "candidate": event.candidate.candidate,
+                        "sdpMid": event.candidate.sdpMid,
+                        "sdpMLineIndex": event.candidate.sdpMLineIndex
+                    },
+                    "remote": "admin_user_id",
+                    "sender": local_id
+                }));
+                console.log("管理者用ICE候補を送る。");
+            } else {
+                console.log("管理者用ICE候補の収集が完了しました。");
+            }
+        }
+
+    } catch (error) {
+        console.error("管理者用WebRTC処理エラー:", error);
+    }
+}
+
+// 管理者用ICE候補を受け取った時の処理
+async function receiveAdminIceCandidate(iceData) {
+    try {
+        if (admin_peer_connection) {
+            const iceCandidate = new RTCIceCandidate({
+                candidate: iceData.candidate,
+                sdpMid: iceData.sdpMid,
+                sdpMLineIndex: iceData.sdpMLineIndex
+            });
+            await admin_peer_connection.addIceCandidate(iceCandidate);
+            console.log("管理者用ICE候補を追加した。");
+        } else {
+            console.log("管理者用PeerConnectionが存在しません。");
+        }
+    } catch (error) {
+        console.error("管理者用ICE候補追加エラー:", error);
     }
 }
 
@@ -438,3 +658,4 @@ async function main() {
 main().catch(err => {
     console.error('エラーが発生しました;', err);
 });
+
