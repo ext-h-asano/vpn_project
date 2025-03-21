@@ -151,7 +151,7 @@ async function gotMessageFromServer(message){
         }
     } else if (signal.ice) {
         // ICEも送信元に基づいて適切なピアコネクションに割り当てる
-        if (isAdmin) {
+        if (signal.action == "admin_ice") {
             console.log("管理者からのICE候補を受信しました");
             await receiveAdminIceCandidate(signal.ice);
         } else {
@@ -398,7 +398,7 @@ async function receiveOfferAndSendAnswer(data) {
                 "sdp": peer_connection.localDescription.sdp,
                 "type": peer_connection.localDescription.type
             },
-            "remote": remote_id
+            "remote": "admin_web" + remote_id
         }));
         console.log("作成したAnswerを送り返した。");
 
@@ -410,7 +410,7 @@ async function receiveOfferAndSendAnswer(data) {
                         "sdpMid": event.candidate.sdpMid,
                         "sdpMLineIndex": event.candidate.sdpMLineIndex
                     },
-                    "remote": remote_id
+                    "remote": "admin_web" + remote_id
                 }));
                 console.log("ICE候補を送る。");
                 console.log(`ICE候補の詳細: ${JSON.stringify({
