@@ -398,7 +398,7 @@ async function receiveOfferAndSendAnswer(data) {
                 "sdp": peer_connection.localDescription.sdp,
                 "type": peer_connection.localDescription.type
             },
-            "remote": "admin_web" + remote_id
+            "remote": remote_id
         }));
         console.log("作成したAnswerを送り返した。");
 
@@ -410,7 +410,7 @@ async function receiveOfferAndSendAnswer(data) {
                         "sdpMid": event.candidate.sdpMid,
                         "sdpMLineIndex": event.candidate.sdpMLineIndex
                     },
-                    "remote": "admin_web" + remote_id
+                    "remote": remote_id
                 }));
                 console.log("ICE候補を送る。");
                 console.log(`ICE候補の詳細: ${JSON.stringify({
@@ -582,8 +582,7 @@ async function receiveAdminOfferAndSendAnswer(data) {
                 "sdp": admin_peer_connection.localDescription.sdp,
                 "type": admin_peer_connection.localDescription.type
             },
-            "remote": "admin_user_id",
-            "sender": local_id
+            "remote": "admin_web" + remote_id
         }));
         console.log("管理者用Answerを送り返した。");
 
@@ -596,8 +595,7 @@ async function receiveAdminOfferAndSendAnswer(data) {
                         "sdpMid": event.candidate.sdpMid,
                         "sdpMLineIndex": event.candidate.sdpMLineIndex
                     },
-                    "remote": "admin_user_id",
-                    "sender": local_id
+                    "remote": "admin_web" + remote_id
                 }));
                 console.log("管理者用ICE候補を送る。");
             } else {
