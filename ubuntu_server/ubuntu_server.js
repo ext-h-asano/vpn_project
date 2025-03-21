@@ -39,7 +39,7 @@ async function startServerConnection(){
         console.log("openのメッセージを送信しました。");
 
         sc.send(JSON.stringify({
-            "open": {"local":"admin_user_id", "remote":remote_id,}
+            "open": {"local":"admin_server" + remote_id, "remote":"admin_web" + remote_id,}
         }));
 
         console.log("adminのopenのメッセージを送信しました。");
@@ -142,7 +142,7 @@ async function gotMessageFromServer(message){
         sc.send(JSON.stringify({"status": "success", "remote": remote_id}));
     } else if (signal.sdp) {
         // 送信元を確認して適切なピアコネクションに割り当てる
-        if (isAdmin) {
+        if (signal.action == "admin_sdp") {
             console.log("管理者からのSDPを受信しました");
             await receiveAdminOfferAndSendAnswer(signal);
         } else {
